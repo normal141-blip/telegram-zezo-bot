@@ -297,7 +297,6 @@ async def handle_symbol(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ حدث خطأ أثناء التحليل: {str(e)}")
 
 
-
 def main():
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
