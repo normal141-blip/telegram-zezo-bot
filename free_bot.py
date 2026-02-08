@@ -263,21 +263,29 @@ def analyze(symbol: str) -> str:
     sig = compute_signals(df)
     rec, why, strength = decide_recommendation(sig)
     lv = build_levels(sig, rec)
+if mode == "5m":
+    timeframe = "5 دقائق"
+elif mode == "1d":
+    timeframe = "يومي"
+else:
+    timeframe = mode
 
-    return (
-        f"📊 {symbol}\n"
-        f"🕌 الشرعية: (مسؤوليتك أنت)\n"
-        f"📌 التوصية: {rec} (مسؤوليتك أنت)\n"
-        f"💪 قوة الإشارة: {strength}%\n"
-        f"🧠 السبب: {why}\n"
-        f"📈 RSI: {sig['rsi']:.1f} | EMA9: {sig['ema9']:.2f} | EMA21: {sig['ema21']:.2f} | VWAP: {sig['vwap']:.2f}\n"
-        f"💰 دخول: {lv['entry']:.2f}\n"
-        f"🛑 وقف خسارة: {lv['sl']:.2f}\n"
-        f"🎯 هدف 1: {lv['t1']:.2f}\n"
-        f"🎯 هدف 2: {lv['t2']:.2f}\n"
-        f"🎯 هدف 3: {lv['t3']:.2f}\n"
-        f"🎯 هدف 4: {lv['t4']:.2f}"
-    )
+return (
+    f"📊 {symbol}\n"
+    f"⏱️ الإطار: {timeframe}\n"
+    f"🕌 الشرعية: (مسؤوليتك أنت)\n"
+    f"📌 التوصية: {rec} (مسؤوليتك أنت)\n"
+    f"💪 قوة الإشارة: {strength}%\n"
+    f"🧠 السبب: {why}\n"
+    f"📈 RSI: {sig['rsi']:.1f} | EMA9: {sig['ema9']:.2f} | EMA21: {sig['ema21']:.2f} | VWAP: {sig['vwap']:.2f}\n"
+    f"💰 دخول: {lv['entry']:.2f}\n"
+    f"🛑 وقف خسارة: {lv['sl']:.2f}\n"
+    f"🎯 هدف 1: {lv['t1']:.2f}\n"
+    f"🎯 هدف 2: {lv['t2']:.2f}\n"
+    f"🎯 هدف 3: {lv['t3']:.2f}\n"
+    f"🎯 هدف 4: {lv['t4']:.2f}"
+)
+
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -323,6 +331,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
