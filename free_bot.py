@@ -197,7 +197,7 @@ def build_levels(sig: dict, rec: str) -> dict:
     return {"entry": entry, "sl": sl, "t1": t1, "t2": t2, "t3": t3, "t4": t4}
 
 
-def (symbol: str) -> str:
+def analyze(symbol: str) -> str:
     df, mode = fetch_data(symbol)
 
     if df is None or df.empty:
@@ -274,4 +274,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
