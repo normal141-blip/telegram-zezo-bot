@@ -201,21 +201,14 @@ def analyze(symbol: str) -> str:
     df, mode = fetch_data(symbol)
 
     if df is None or df.empty:
-        return "❌ لا توجد بيانات (السوق مغلق أو الرمز خطأ)"
-
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
-
-    df = df.dropna()
-    if df.empty:
-        return "❌ لا توجد بيانات (بعد تنظيف البيانات)"
+        return "❌ لا توجد بيانات"
 
     sig = compute_signals(df)
-    rec, reasons, strength = decide_recommendation(sig)
-    levels = build_levels(sig, rec)
+    rec, why, strength = decide_recommendation(sig)
+    lv = build_levels(sig, rec)
 
-      return (
-        f"📊 {symbol} ({mode})\n"
+    return (
+        f"📊 {symbol}\n"
         f"🕌 الشرعية: (مسؤوليتك أنت)\n"
         f"📌 التوصية: {rec} (مسؤوليتك أنت)\n"
         f"💪 قوة الإشارة: {strength}%\n"
@@ -228,7 +221,6 @@ def analyze(symbol: str) -> str:
         f"🎯 هدف 3: {lv['t3']:.2f}\n"
         f"🎯 هدف 4: {lv['t4']:.2f}"
     )
-
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -274,5 +266,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
