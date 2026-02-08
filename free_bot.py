@@ -257,9 +257,8 @@ async def handle_symbol(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         result = await asyncio.to_thread(analyze, symbol)
         await update.message.reply_text(result)
-  except Exception as e:
-    await update.message.reply_text(f"❌ حدث خطأ أثناء التحليل: {str(e)}")
-
+    except Exception as e:
+        await update.message.reply_text(f"❌ حدث خطأ أثناء التحليل: {str(e)}")
 
 def main():
     app = Application.builder().token(TOKEN).build()
@@ -276,6 +275,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
