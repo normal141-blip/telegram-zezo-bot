@@ -1,12 +1,12 @@
 import os
 import asyncio
+import time
 import pandas as pd
 import yfinance as yf
 from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
-# مؤشرات (ta)
 from ta.momentum import RSIIndicator
 from ta.trend import EMAIndicator
 from ta.volume import VolumeWeightedAveragePrice
@@ -16,38 +16,59 @@ from ta.volume import VolumeWeightedAveragePrice
 load_dotenv()
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 if not TOKEN:
-    raise RuntimeError("ضع TELEGRAM_BOT_TOKEN داخل ملف .env في نفس مجلد البوت")
+    raise RuntimeError("TELEGRAM_BOT_TOKEN غير موجود. ضعه في Variables على Railway أو Environment Variables.")
 
 
-def fetch_data(symbol: str) -> pd.DataFrame:
-    # نحاول أولاً بيانات قصيرة (إذا السوق مفتوح)
-    df = yf.download(
-        tickers=symbol,
-        period="5d",
-        interval="5m",
-        progress=False,
-        threads=False
-    )
+def fetch_data(symbol: str) -> tuple[pd.DataFrame, str]:
+    symbol = symbol.strip().upper()
 
-    # إذا لم توجد بيانات، نجرب بيانات يومية (يعمل حتى لو السوق مغلق)
-    if df.empty:
-        df = yf.download(
+    def _download(period: str, interval: str) -> pd.DataFrame:
+        return yf.download(
             tickers=symbol,
-            period="1mo",
-            interval="1d",
+            period=period,
+            interval=interval,
             progress=False,
-            threads=False
+            threads=False,
+            auto_adjust=True
         )
 
-    return df
-    
-    if df is None or df.empty:
-        return pd.DataFrame()
+    df_5m = pd.DataFrame()
+    for _ in range(3):
+        df_5m = _download(period="2d", interval="5m")
+        if df_5m is not None and not df_5m.empty:
+            break
+        time.sleep(1.0)
 
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
+    if df_5m is None or df_5m.empty:
+        df_1d = _download(period="6mo", interval="1d")
+        return df_1d, "1d"
 
-    return df.dropna()
+    if isinstance(df_5m.columns, pd.MultiIndex):
+        df_5m.columns = df_5m.columns.get_level_values(0)
+
+    df_5m = df_5m.dropna()
+    if df_5m.empty:
+        df_1d = _download(period="6mo", interval="1d")
+        return df_1d, "1d"
+
+    last_ts = df_5m.index[-1]
+    try:
+        if getattr(last_ts, "tzinfo", None) is None:
+            last_ts = last_ts.tz_localize("UTC")
+    except Exception:
+        pass
+
+    now_utc = pd.Timestamp.now(tz="UTC")
+    try:
+        age = now_utc - last_ts
+    except Exception:
+        age = pd.Timedelta(minutes=999)
+
+    if age <= pd.Timedelta(minutes=45):
+        return df_5m, "5m"
+
+    df_1d = _download(period="6mo", interval="1d")
+    return df_1d, "1d"
 
 
 def compute_signals(df: pd.DataFrame) -> dict:
@@ -104,7 +125,6 @@ def decide_recommendation(sig: dict) -> tuple[str, str, int]:
     sell_score = 0
     reasons = []
 
-    # EMA اتجاه (وزن أعلى)
     if ema9 > ema21:
         buy_score += 2
         reasons.append("اتجاه صاعد (EMA)")
@@ -114,7 +134,6 @@ def decide_recommendation(sig: dict) -> tuple[str, str, int]:
     else:
         reasons.append("EMA متعادل")
 
-    # VWAP
     if close > vwap:
         buy_score += 1
         reasons.append("فوق VWAP")
@@ -122,7 +141,6 @@ def decide_recommendation(sig: dict) -> tuple[str, str, int]:
         sell_score += 1
         reasons.append("تحت VWAP")
 
-    # RSI
     if 40 <= rsi <= 65:
         buy_score += 1
         reasons.append("RSI صحي")
@@ -135,7 +153,6 @@ def decide_recommendation(sig: dict) -> tuple[str, str, int]:
     else:
         reasons.append("RSI طبيعي")
 
-    # Volume Spike
     if volume_ratio >= 1.5:
         buy_score += 1
         reasons.append("حجم قوي")
@@ -151,9 +168,9 @@ def decide_recommendation(sig: dict) -> tuple[str, str, int]:
         return "🔴 بيع", " + ".join(reasons), strength
 
     if buy_score > sell_score:
-        return "🟡 انتظار (ميل شراء)", " + ".join(reasons), strength
+        return "🟡 انتظار (أميل الى شراء)", " + ".join(reasons), strength
     if sell_score > buy_score:
-        return "🟡 انتظار (ميل بيع)", " + ".join(reasons), strength
+        return "🟡 انتظار (أميل الى بيع)", " + ".join(reasons), strength
 
     return "🟡 انتظار", " + ".join(reasons), strength
 
@@ -181,39 +198,42 @@ def build_levels(sig: dict, rec: str) -> dict:
 
 
 def analyze(symbol: str) -> str:
-    df = fetch_data(symbol)
-    if df.empty:
+    df, mode = fetch_data(symbol)
+
+    if df is None or df.empty:
         return "❌ لا توجد بيانات (السوق مغلق أو الرمز خطأ)"
 
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
+
+    df = df.dropna()
+    if df.empty:
+        return "❌ لا توجد بيانات (بعد تنظيف البيانات)"
+
     sig = compute_signals(df)
-    rec, why, strength = decide_recommendation(sig)
-    lv = build_levels(sig, rec)
+    rec, reasons, strength = decide_recommendation(sig)
+    levels = build_levels(sig, rec)
 
     return (
-        f"📊 {symbol}\n"
-        f"🕌 الشرعية: (مسؤوليتك أنت)\n"
-        f"📌 التوصية: {rec} (مسؤوليتك أنت)\n"
-        f"💪 قوة الإشارة: {strength}%\n"
-        f"🧠 السبب: {why}\n"
-        f"📈 RSI: {sig['rsi']:.1f} | EMA9: {sig['ema9']:.2f} | EMA21: {sig['ema21']:.2f} | VWAP: {sig['vwap']:.2f}\n"
-        f"💰 دخول: {lv['entry']:.2f}\n"
-        f"🛑 وقف خسارة: {lv['sl']:.2f}\n"
-        f"🎯 هدف 1: {lv['t1']:.2f}\n"
-        f"🎯 هدف 2: {lv['t2']:.2f}\n"
-        f"🎯 هدف 3: {lv['t3']:.2f}\n"
-        f"🎯 هدف 4: {lv['t4']:.2f}"
+        f"📌 {symbol} ({mode})\n"
+        f"السعر: {sig['close']:.2f}\n"
+        f"RSI: {sig['rsi']:.1f} | EMA9: {sig['ema9']:.2f} | EMA21: {sig['ema21']:.2f}\n"
+        f"VWAP: {sig['vwap']:.2f} | قوة الحجم: {sig['volume_ratio']:.2f}x\n\n"
+        f"التوصية: {rec} ({strength}%)\n"
+        f"الأسباب: {reasons}\n\n"
+        f"🎯 دخول: {levels['entry']:.2f}\n"
+        f"🛑 وقف: {levels['sl']:.2f}\n"
+        f"✅ أهداف: {levels['t1']:.2f}, {levels['t2']:.2f}, {levels['t3']:.2f}, {levels['t4']:.2f}\n\n"
+        f"⚠️ القرار الاستثماري يعود لك."
     )
 
 
-# ===== Telegram =====
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🤖 مرحبًا بك في بوت زيزو لتحليل الأسهم\n\n"
         "📈 هذا البوت يقوم بتحليل الأسهم باستخدام الذكاء الاصطناعي.\n\n"
         "✉️ فقط أرسل رمز السهم مثل:\n"
-        "AAPL\n"
-        "TSLA\n"
-        "NVDA\n\n"
+        "AAPL\nTSLA\nNVDA\n\n"
         "📊 سيقوم البوت بتحليل السهم وإظهار الفرص المتاحة.\n"
         "⚠️ القرار الاستثماري يعود لك."
     )
@@ -252,4 +272,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
