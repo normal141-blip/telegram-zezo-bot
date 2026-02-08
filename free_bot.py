@@ -72,10 +72,19 @@ def fetch_data(symbol: str) -> tuple[pd.DataFrame, str]:
 
 
 def compute_signals(df: pd.DataFrame) -> dict:
-    close = df["Close"]
-    high = df["High"]
-    low = df["Low"]
-    vol = df["Volume"]
+    needed = ["Close", "High", "Low", "Volume"]
+    for c in needed:
+        if c not in df.columns:
+            raise ValueError(f"Missing column: {c}")
+
+    df = df.dropna()
+    if len(df) < 30:
+        raise ValueError("Not enough data")
+
+    close = df["Close"].astype(float)
+    high = df["High"].astype(float)
+    low = df["Low"].astype(float)
+    vol = df["Volume"].astype(float)
 
     ema9 = EMAIndicator(close=close, window=9).ema_indicator()
     ema21 = EMAIndicator(close=close, window=21).ema_indicator()
@@ -84,6 +93,7 @@ def compute_signals(df: pd.DataFrame) -> dict:
     vwap = VolumeWeightedAveragePrice(
         high=high, low=low, close=close, volume=vol, window=14
     ).volume_weighted_average_price()
+
 
     avg_vol = vol.tail(20).mean()
     current_vol = float(vol.iloc[-1]) if len(vol) else 0.0
@@ -247,8 +257,8 @@ async def handle_symbol(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         result = await asyncio.to_thread(analyze, symbol)
         await update.message.reply_text(result)
-    except Exception as e:
-        await update.message.reply_text(f"❌ خطأ: {type(e).__name__}")
+  except Exception as e:
+    await update.message.reply_text(f"❌ حدث خطأ أثناء التحليل: {str(e)}")
 
 
 def main():
@@ -266,6 +276,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
