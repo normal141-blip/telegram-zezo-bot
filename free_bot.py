@@ -19,11 +19,57 @@ if not TOKEN:
     raise RuntimeError("TELEGRAM_BOT_TOKEN غير موجود. ضعه في Variables على Railway أو Environment Variables.")
 
 
+def _normalize_ohlcv(df: pd.DataFrame, symbol: str) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame()
+
+    if isinstance(df.columns, pd.MultiIndex):
+        cols0 = set(map(str, df.columns.get_level_values(0)))
+        cols1 = set(map(str, df.columns.get_level_values(1)))
+
+        if "Close" in cols0:
+            wanted = []
+            for k in ["Open", "High", "Low", "Close", "Adj Close", "Volume"]:
+                if k in cols0:
+                    sub = df[k]
+                    if isinstance(sub, pd.DataFrame):
+                        if symbol in sub.columns:
+                            wanted.append(sub[symbol].rename(k))
+                        else:
+                            wanted.append(sub.iloc[:, 0].rename(k))
+                    else:
+                        wanted.append(sub.rename(k))
+            df = pd.concat(wanted, axis=1)
+
+        elif "Close" in cols1:
+            wanted = []
+            for k in ["Open", "High", "Low", "Close", "Adj Close", "Volume"]:
+                if k in cols1:
+                    sub = df.xs(k, level=1, axis=1, drop_level=True)
+                    if isinstance(sub, pd.DataFrame):
+                        if symbol in sub.columns:
+                            wanted.append(sub[symbol].rename(k))
+                        else:
+                            wanted.append(sub.iloc[:, 0].rename(k))
+                    else:
+                        wanted.append(sub.rename(k))
+            df = pd.concat(wanted, axis=1)
+
+    if "Adj Close" in df.columns and "Close" not in df.columns:
+        df["Close"] = df["Adj Close"]
+
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
+
+    df = df.dropna()
+    return df
+
+
 def fetch_data(symbol: str) -> tuple[pd.DataFrame, str]:
     symbol = symbol.strip().upper()
 
     def _download(period: str, interval: str) -> pd.DataFrame:
-        return yf.download(
+        df = yf.download(
             tickers=symbol,
             period=period,
             interval=interval,
@@ -31,22 +77,15 @@ def fetch_data(symbol: str) -> tuple[pd.DataFrame, str]:
             threads=False,
             auto_adjust=True
         )
+        return _normalize_ohlcv(df, symbol)
 
     df_5m = pd.DataFrame()
     for _ in range(3):
         df_5m = _download(period="2d", interval="5m")
-        if df_5m is not None and not df_5m.empty:
+        if not df_5m.empty:
             break
         time.sleep(1.0)
 
-    if df_5m is None or df_5m.empty:
-        df_1d = _download(period="6mo", interval="1d")
-        return df_1d, "1d"
-
-    if isinstance(df_5m.columns, pd.MultiIndex):
-        df_5m.columns = df_5m.columns.get_level_values(0)
-
-    df_5m = df_5m.dropna()
     if df_5m.empty:
         df_1d = _download(period="6mo", interval="1d")
         return df_1d, "1d"
@@ -72,19 +111,16 @@ def fetch_data(symbol: str) -> tuple[pd.DataFrame, str]:
 
 
 def compute_signals(df: pd.DataFrame) -> dict:
-    needed = ["Close", "High", "Low", "Volume"]
-    for c in needed:
-        if c not in df.columns:
-            raise ValueError(f"Missing column: {c}")
+    def col(name: str) -> pd.Series:
+        x = df[name]
+        if isinstance(x, pd.DataFrame):
+            x = x.iloc[:, 0]
+        return x.squeeze()
 
-    df = df.dropna()
-    if len(df) < 30:
-        raise ValueError("Not enough data")
-
-    close = df["Close"].astype(float)
-    high = df["High"].astype(float)
-    low = df["Low"].astype(float)
-    vol = df["Volume"].astype(float)
+    close = col("Close")
+    high = col("High")
+    low = col("Low")
+    vol = col("Volume")
 
     ema9 = EMAIndicator(close=close, window=9).ema_indicator()
     ema21 = EMAIndicator(close=close, window=21).ema_indicator()
@@ -93,7 +129,6 @@ def compute_signals(df: pd.DataFrame) -> dict:
     vwap = VolumeWeightedAveragePrice(
         high=high, low=low, close=close, volume=vol, window=14
     ).volume_weighted_average_price()
-
 
     avg_vol = vol.tail(20).mean()
     current_vol = float(vol.iloc[-1]) if len(vol) else 0.0
@@ -121,6 +156,7 @@ def compute_signals(df: pd.DataFrame) -> dict:
         "range": range_val,
         "volume_ratio": float(volume_ratio),
     }
+
 
 
 def decide_recommendation(sig: dict) -> tuple[str, str, int]:
@@ -277,6 +313,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
