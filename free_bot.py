@@ -197,7 +197,7 @@ def build_levels(sig: dict, rec: str) -> dict:
     return {"entry": entry, "sl": sl, "t1": t1, "t2": t2, "t3": t3, "t4": t4}
 
 
-def analyze(symbol: str) -> str:
+def (symbol: str) -> str:
     df, mode = fetch_data(symbol)
 
     if df is None or df.empty:
@@ -214,17 +214,19 @@ def analyze(symbol: str) -> str:
     rec, reasons, strength = decide_recommendation(sig)
     levels = build_levels(sig, rec)
 
-    return (
-        f"📌 {symbol} ({mode})\n"
-        f"السعر: {sig['close']:.2f}\n"
-        f"RSI: {sig['rsi']:.1f} | EMA9: {sig['ema9']:.2f} | EMA21: {sig['ema21']:.2f}\n"
-        f"VWAP: {sig['vwap']:.2f} | قوة الحجم: {sig['volume_ratio']:.2f}x\n\n"
-        f"التوصية: {rec} ({strength}%)\n"
-        f"الأسباب: {reasons}\n\n"
-        f"🎯 دخول: {levels['entry']:.2f}\n"
-        f"🛑 وقف: {levels['sl']:.2f}\n"
-        f"✅ أهداف: {levels['t1']:.2f}, {levels['t2']:.2f}, {levels['t3']:.2f}, {levels['t4']:.2f}\n\n"
-        f"⚠️ القرار الاستثماري يعود لك."
+      return (
+        f"📊 {symbol} ({mode})\n"
+        f"🕌 الشرعية: (مسؤوليتك أنت)\n"
+        f"📌 التوصية: {rec} (مسؤوليتك أنت)\n"
+        f"💪 قوة الإشارة: {strength}%\n"
+        f"🧠 السبب: {why}\n"
+        f"📈 RSI: {sig['rsi']:.1f} | EMA9: {sig['ema9']:.2f} | EMA21: {sig['ema21']:.2f} | VWAP: {sig['vwap']:.2f}\n"
+        f"💰 دخول: {lv['entry']:.2f}\n"
+        f"🛑 وقف خسارة: {lv['sl']:.2f}\n"
+        f"🎯 هدف 1: {lv['t1']:.2f}\n"
+        f"🎯 هدف 2: {lv['t2']:.2f}\n"
+        f"🎯 هدف 3: {lv['t3']:.2f}\n"
+        f"🎯 هدف 4: {lv['t4']:.2f}"
     )
 
 
@@ -272,3 +274,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
