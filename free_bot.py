@@ -20,6 +20,7 @@ if not TOKEN:
 
 
 def fetch_data(symbol: str) -> pd.DataFrame:
+    # نحاول أولاً بيانات قصيرة (إذا السوق مفتوح)
     df = yf.download(
         tickers=symbol,
         period="5d",
@@ -27,6 +28,19 @@ def fetch_data(symbol: str) -> pd.DataFrame:
         progress=False,
         threads=False
     )
+
+    # إذا لم توجد بيانات، نجرب بيانات يومية (يعمل حتى لو السوق مغلق)
+    if df.empty:
+        df = yf.download(
+            tickers=symbol,
+            period="1mo",
+            interval="1d",
+            progress=False,
+            threads=False
+        )
+
+    return df
+    
     if df is None or df.empty:
         return pd.DataFrame()
 
@@ -238,3 +252,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
