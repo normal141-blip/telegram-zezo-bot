@@ -111,16 +111,26 @@ def fetch_data(symbol: str) -> tuple[pd.DataFrame, str]:
 
 
 def compute_signals(df: pd.DataFrame) -> dict:
-    def col(name: str) -> pd.Series:
-        x = df[name]
-        if isinstance(x, pd.DataFrame):
-            x = x.iloc[:, 0]
-        return x.squeeze()
+    close = df["Close"]
+    if isinstance(close, pd.DataFrame):
+        close = close.iloc[:, 0]
 
-    close = col("Close")
-    high = col("High")
-    low = col("Low")
-    vol = col("Volume")
+    high = df["High"]
+    if isinstance(high, pd.DataFrame):
+        high = high.iloc[:, 0]
+
+    low = df["Low"]
+    if isinstance(low, pd.DataFrame):
+        low = low.iloc[:, 0]
+
+    vol = df["Volume"]
+    if isinstance(vol, pd.DataFrame):
+        vol = vol.iloc[:, 0]
+
+    close = close.astype(float)
+    high = high.astype(float)
+    low = low.astype(float)
+    vol = vol.astype(float)
 
     ema9 = EMAIndicator(close=close, window=9).ema_indicator()
     ema21 = EMAIndicator(close=close, window=21).ema_indicator()
@@ -156,6 +166,7 @@ def compute_signals(df: pd.DataFrame) -> dict:
         "range": range_val,
         "volume_ratio": float(volume_ratio),
     }
+
 
 
 
@@ -312,6 +323,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
